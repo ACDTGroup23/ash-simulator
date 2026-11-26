@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G27 Ash–Growth Simulator</title>
+<meta name="description" content="Interactive model of how wildfire ash load changes soil-water salinity and the growth of barley and bean, calibrated with Group 27's barley measurements.">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<a class="skip" href="#model" data-i18n="skip">Skip to the model</a>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="#hero"><svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h18v3H3z" fill="#7b5a43"/><path d="M3 15.5h18V18H3z" fill="#a9aca8"/><path d="M12 15.5c0-4 1-7 4-10M12 15.5c0-3-1.2-5.4-4-7" stroke="#4e8a3a" stroke-width="2" fill="none" stroke-linecap="round"/></svg><span>G27 Ash–Growth Simulator</span></a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#model" data-i18n="navModel">Model</a>
+      <a href="#measured" data-i18n="navMeasured">Measurements</a>
+      <a href="#calib" data-i18n="navCalib">Before vs after</a>
+      <a href="#sources" data-i18n="navSources">Sources</a>
+    </nav>
+    <button class="lang" id="lang" type="button" aria-label="Switch language">한국어</button>
+  </div>
+</header>
+
+<main>
+  <section id="hero" class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <h1 data-i18n="h1">How much wildfire ash can a seedling take?</h1>
+        <p class="lede" data-i18n="lede">Drag the ash load. The model turns ash on the soil into salt in the soil water (EC), then turns EC into growth for barley and bean. Every input comes from published work or our own measurements.</p>
+
+      </div>
+      <div class="hero-ro">
+        <dl class="readouts" aria-live="polite">
+          <div><dt data-i18n="roAsh">Ash in one tray cell</dt><dd><span id="roAsh">0.69</span> <small>g</small></dd></div>
+          <div><dt data-i18n="roEC">Salt in the soil water (EC)</dt><dd><span id="roEC">3.2</span> <small>dS/m</small></dd></div>
+          <div class="sp-barley"><dt data-i18n="roBarley">Barley growth</dt><dd><span id="roBarley">100</span><small>%</small></dd></div>
+          <div class="sp-bean"><dt data-i18n="roBean">Bean growth</dt><dd><span id="roBean">59</span><small>%</small></dd></div>
+        </dl>
+        <p class="fine" id="heroNote"></p>
+      </div>
+      <figure class="stage">
+        <svg id="cellArt" viewBox="0 0 470 340" role="img" aria-labelledby="cellArtTitle"><title id="cellArtTitle">Cross-section of one tray cell with an ash layer and two seedlings</title></svg>
+        <figcaption class="fine" data-i18n="artCap">One 3.4 cm tray cell. The ash layer and plant heights show the trend; they are not to scale.</figcaption>
+      </figure>
+      <div class="loadbar">
+        <label for="load" class="loadlabel"><span data-i18n="loadLabel">Ash load on the ground</span> <output id="loadOut">6.0</output> <span class="unit">Mg/ha</span></label>
+        <input type="range" id="load" min="0" max="40" step="0.1" value="6">
+        <div class="presets" role="group" aria-label="Field ash loads (Santín et al., 2015)">
+          <button type="button" data-load="0" data-i18n="pNone">No ash</button>
+          <button type="button" data-load="6"><span data-i18n="pLow">Low</span> 6.0</button>
+          <button type="button" data-load="15.9"><span data-i18n="pHigh">High</span> 15.9</button>
+          <button type="button" data-load="34.2"><span data-i18n="pExtreme">Extreme</span> 34.2</button>
+          <span class="fine" data-i18n="presetSrc">Field ash loads after low, high and extreme fire severity (Santín et al., 2015)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="model" class="band">
+    <div class="wrap">
+      <h2 data-i18n="hModel">The model</h2>
+      <p class="intro" data-i18n="pModel">Three steps link the ash on the ground to plant growth. The numbers follow the ash load above and the assumptions below.</p>
+      <ol class="chain" id="chain"></ol>
+      <div class="model-grid">
+        <aside class="controls" aria-labelledby="ctlTitle">
+          <h3 id="ctlTitle" data-i18n="ctlTitle">Assumptions you can change</h3>
+          <div class="ctl"><label for="ashEC"><span data-i18n="cAshEC">EC of ash in water, 1:5</span> <output id="ashECOut"></output> <span class="unit">dS/m</span></label><input type="range" id="ashEC" min="5" max="60" step="1"><p class="hint" data-i18n="hAshEC">Neina et al. (2020): mean 33, SD 14</p></div>
+          <div class="ctl"><label for="f"><span data-i18n="cF">f: share of ash salts that reach the roots</span> <output id="fOut"></output></label><input type="range" id="f" min="0" max="1" step="0.01"><p class="hint" data-i18n="hF">Unknown. 1 is the worst case: every salt dissolves.</p></div>
+          <div class="ctl"><label for="soilEC"><span data-i18n="cSoilEC">EC of the potting soil</span> <output id="soilECOut"></output> <span class="unit">dS/m</span></label><input type="range" id="soilEC" min="0" max="3" step="0.1"><p class="hint" data-i18n="hSoilEC">Not measured, so 0 is assumed.</p></div>
+          <div class="ctl"><label for="soilVol"><span data-i18n="cSoilVol">Soil in one cell</span> <output id="soilVolOut"></output> <span class="unit">mL</span></label><input type="range" id="soilVol" min="20" max="70" step="0.1"><p class="hint" data-i18n="hSoilVol">3.4 × 3.4 × 4.4 cm = 50.9 mL (filled to 1 cm below the rim, ISO 11269-2)</p></div>
+          <div class="ctl"><label for="porosity"><span data-i18n="cPor">Pore space of the soil</span> <output id="porOut"></output></label><input type="range" id="porosity" min="0.5" max="0.9" step="0.01"><p class="hint" data-i18n="hPor">Bilderback &amp; Fonteno (1987): 0.71</p></div>
+          <button type="button" class="btn-quiet" id="reset" data-i18n="reset">Reset to published values</button>
+        </aside>
+        <div class="charts">
+          <figure class="plate"><figcaption><h3 data-i18n="tGrowth">Predicted growth across ash loads</h3></figcaption><div class="chart" id="chGrowth"></div></figure>
+          <figure class="plate"><figcaption><h3 data-i18n="tEC">Soil-water EC at each ash level</h3></figcaption><div class="chart" id="chEC"></div></figure>
+          <figure class="plate wide">
+            <figcaption><h3 data-i18n="tHeat">Where growth falls to half</h3><p class="fine" data-i18n="sHeat">Colour shows predicted growth for every f and ash load. Click the map to use that point.</p>
+              <div class="seg" role="group" aria-label="Species"><button type="button" data-heat="barley" class="on" data-i18n="barley">Barley</button><button type="button" data-heat="bean" data-i18n="bean">Bean</button></div></figcaption>
+            <div class="chart" id="chHeat"></div>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="measured" class="band alt">
+    <div class="wrap">
+      <h2 data-i18n="hMeasured">Our measurements</h2>
+      <p class="intro" data-i18n="pMeasured">Barley grew in two 12-cell trays. Each column got 0, 1, 3 or 6 pinches of ash per cell (not weighed). Set 1 was sown on 23 Oct and Set 2 on 26 Oct. Bean did not germinate even in the controls, so it has no data.</p>
+      <p class="finding" data-i18n="finding">Ash level did not change barley height (two-way ANOVA on the 46 plants of 6 Nov: ash p = 0.47, set p &lt; 0.001). Set 2 was 3.2 cm shorter than Set 1.</p>
+      <div class="m-grid">
+        <figure class="plate wide"><figcaption><h3 data-i18n="tTime">Shoot height over time, mean ± SE</h3></figcaption><div class="chart" id="chTime"></div></figure>
+        <figure class="plate"><figcaption><h3 data-i18n="tDots">Every plant on 6 Nov</h3></figcaption><div class="chart" id="chDots"></div></figure>
+        <div class="tables">
+          <label class="check"><input type="checkbox" id="ex168"> <span data-i18n="ex168">Leave out the 16.8 cm plant</span></label>
+          <table class="data" id="tRatio"><caption data-i18n="tRatio">Height relative to the control, with the set difference removed</caption></table>
+          <table class="data" id="tEmerge"><caption data-i18n="tEmerge">Seedlings that came up, out of 9 seeds</caption></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="calib" class="band">
+    <div class="wrap">
+      <h2 data-i18n="hCalib">Before vs after the experiment</h2>
+      <div class="two-col">
+        <p data-i18n="pCalib1">Before the experiment we only had published values, and two things were unknown: how salty our ash is and how much of its salt reaches the roots (f). In the model they always appear multiplied together, so we follow their product, the effective ash EC.</p>
+        <p data-i18n="pCalib2">After the experiment, the barley heights rule out the effective ash EC values that would have made the plants shorter. Linking our trays to Mg/ha needs one more number: the mass of one pinch of ash.</p>
+      </div>
+      <div class="pinchbar">
+        <div class="ctl"><label for="pinch"><span data-i18n="cPinch">Mass of one pinch of ash</span> <output id="pinchOut"></output> <span class="unit">g</span></label><input type="range" id="pinch" min="0.02" max="1.5" step="0.01"></div>
+        <div class="ctl small"><label for="pinchSd" data-i18n="cPinchSd">Spread between pinches, SD (g)</label><input type="number" id="pinchSd" min="0" max="1" step="0.01" placeholder="—"></div>
+        <div class="status" id="pinchStatus" role="status"></div>
+      </div>
+      <p class="convert" id="convert"></p>
+      <div class="c-grid">
+        <figure class="plate"><figcaption><h3><span data-i18n="barley">Barley</span> <i class="latin">Hordeum vulgare</i></h3></figcaption><div class="chart" id="chBA_barley"></div></figure>
+        <figure class="plate"><figcaption><h3><span data-i18n="bean">Bean</span> <i class="latin">Phaseolus vulgaris</i></h3></figcaption><div class="chart" id="chBA_bean"></div></figure>
+      </div>
+      <ul class="legend" id="baLegend"></ul>
+      <p class="keyline" id="keyline"></p>
+      <table class="data wide" id="tBA"><caption data-i18n="tBA">Predicted growth at field ash loads, % of control</caption></table>
+      <h3 class="sub" data-i18n="tSweep">How the answer depends on the pinch mass</h3>
+      <p class="fine" id="sweepNote"></p>
+      <div class="s-grid">
+        <figure class="plate"><figcaption><h4 data-i18n="sw1">Effective ash EC, dS/m</h4></figcaption><div class="chart" id="chSw0"></div></figure>
+        <figure class="plate"><figcaption><h4 data-i18n="sw2">Barley at Extreme (34.2 Mg/ha), %</h4></figcaption><div class="chart" id="chSw1"></div></figure>
+        <figure class="plate"><figcaption><h4 data-i18n="sw3">Bean at Low (6.0 Mg/ha), %</h4></figcaption><div class="chart" id="chSw2"></div></figure>
+      </div>
+      <p class="fine" data-i18n="calibNote">This section always uses the published values in the source table, not the sliders in the model section.</p>
+    </div>
+  </section>
+
+  <section id="sources" class="band alt">
+    <div class="wrap">
+      <h2 data-i18n="hSources">Sources and limits</h2>
+      <table class="data wide" id="tSources"></table>
+      <h3 class="sub" data-i18n="hLimits">Limits</h3>
+      <ul class="limits" id="limits"></ul>
+      <h3 class="sub" data-i18n="hRefs">References</h3>
+      <ul class="refs" id="refs"></ul>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p data-i18n="foot1">Made by Group 27 for the USS Capstone, Hanyang University YK Intercollege, 2026.</p>
+    <p class="team">안상현, 오정효, 이준우, 윤상철, 이현진, 박지훈, 서한슬</p>
+    <p class="fine" data-i18n="foot2">The equations and numbers match the team's Colab notebook (G27_Ash_Growth_Simulator_v2.ipynb).</p>
+  </div>
+</footer>
+<div class="tip" id="tip" role="tooltip" hidden></div>
+<script src="assets/data.js"></script>
+<script src="assets/model.js"></script>
+<script src="assets/i18n.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
