@@ -216,3 +216,18 @@ table.data.wide { margin-top: 16px; }
   table.data { font-size: .8rem; }
   table.data th, table.data td { padding: 6px 7px; }
 }
+.presets.tray { margin-top: 6px; }
+.presets .pl { font-size: .88rem; color: var(--ink2); margin-right: 2px; }
+.verdict { max-width: 80ch; margin: 14px 0 18px; padding-left: 14px; border-left: 3px solid var(--after); font-weight: 600; }
+@media (max-width: 600px) {
+  #tTray, #tBA, #tRatio, #tEmerge { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+}
+.pot { margin-top: 40px; padding-top: 8px; border-top: 1px solid var(--rule); }
+@media (max-width: 600px) { #tPot { display: block; overflow-x: auto; white-space: nowrap; } }
+.afterpick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 18px 0 0; font-weight: 600; font-size: .95rem; }
+.afterpick .seg { margin-left: 0; }
+.potpred { font-size: .92rem; max-width: 70ch; }
+@media (max-width: 600px) { #tPot { font-size: .78rem; } }
+.pot-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; margin-top: 16px; align-items: start; }
+.pot-side .ctl { border-top: 1px solid var(--rule); }
+@media (max-width: 860px) { .pot-grid { grid-template-columns: 1fr; } }

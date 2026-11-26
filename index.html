@@ -54,6 +54,12 @@
           <button type="button" data-load="34.2"><span data-i18n="pExtreme">Extreme</span> 34.2</button>
           <span class="fine" data-i18n="presetSrc">Field ash loads after low, high and extreme fire severity (Santín et al., 2015)</span>
         </div>
+        <div class="presets tray" role="group" aria-label="Ash we added per cell">
+          <span class="pl" data-i18n="presetTray">Ash we added per cell:</span>
+          <button type="button" data-key="1"><span class="g">0.17 g</span></button>
+          <button type="button" data-key="3"><span class="g">0.46 g</span></button>
+          <button type="button" data-key="6"><span class="g">0.99 g</span></button>
+        </div>
       </div>
     </div>
   </section>
@@ -89,7 +95,7 @@
   <section id="measured" class="band alt">
     <div class="wrap">
       <h2 data-i18n="hMeasured">Our measurements</h2>
-      <p class="intro" data-i18n="pMeasured">Barley grew in two 12-cell trays. Each column got 0, 1, 3 or 6 pinches of ash per cell (not weighed). Set 1 was sown on 23 Oct and Set 2 on 26 Oct. Bean did not germinate even in the controls, so it has no data.</p>
+      <p class="intro" data-i18n="pMeasured">Barley grew in two 12-cell trays. Each column got 0, 0.17, 0.46 or 0.99 g of ash per cell, a quarter of the protocol amounts for low, high and extreme fires (0.69, 1.84 and 3.95 g). Set 1 was sown on 23 Oct and Set 2 on 26 Oct. Bean did not germinate even in the controls, so it has no data.</p>
       <p class="finding" data-i18n="finding">Ash level did not change barley height (two-way ANOVA on the 46 plants of 6 Nov: ash p = 0.47, set p &lt; 0.001). Set 2 was 3.2 cm shorter than Set 1.</p>
       <div class="m-grid">
         <figure class="plate wide"><figcaption><h3 data-i18n="tTime">Shoot height over time, mean ± SE</h3></figcaption><div class="chart" id="chTime"></div></figure>
@@ -100,6 +106,19 @@
           <table class="data" id="tEmerge"><caption data-i18n="tEmerge">Seedlings that came up, out of 9 seeds</caption></table>
         </div>
       </div>
+      <div class="pot">
+        <h3 class="sub" data-i18n="hPot">Barley, second trial in pots</h3>
+        <p class="intro" data-i18n="pPot">Sown on 11 Nov in four 11 cm pots, 3 seeds each. The pots got the same ash as the bean second trial: 0, 5.70, 15.11 and 32.49 g, which equal 0, 6.0, 15.9 and 34.2 Mg/ha.</p>
+        <div class="pot-grid">
+          <figure class="plate"><figcaption><h3 data-i18n="tPot">Height of each seedling</h3></figcaption><div class="chart" id="chPot"></div></figure>
+          <div class="pot-side">
+            <div class="ctl"><label for="potDepth"><span data-i18n="cPotDepth">Soil depth in the pots</span> <output id="potDepthOut"></output> <span class="unit">cm</span></label><input type="range" id="potDepth" min="2" max="6" step="0.1"><p class="hint" data-i18n="hPotDepth">At least 2 cm, because the seeds were sown 2 cm deep. The real depth was not measured.</p></div>
+            <p class="potpred" id="potPred"></p>
+            <p class="fine" data-i18n="potNote">The no-ash and low pots had no seedlings, so there is no control to compare with.</p>
+          </div>
+        </div>
+        <table class="data wide" id="tPot"><caption data-i18n="tPotTbl">Seedlings and height on 25 Nov</caption></table>
+      </div>
     </div>
   </section>
 
@@ -108,14 +127,13 @@
       <h2 data-i18n="hCalib">Before vs after the experiment</h2>
       <div class="two-col">
         <p data-i18n="pCalib1">Before the experiment we only had published values, and two things were unknown: how salty our ash is and how much of its salt reaches the roots (f). In the model they always appear multiplied together, so we follow their product, the effective ash EC.</p>
-        <p data-i18n="pCalib2">After the experiment, the barley heights rule out the effective ash EC values that would have made the plants shorter. Linking our trays to Mg/ha needs one more number: the mass of one pinch of ash.</p>
+        <p data-i18n="pCalib2">After the experiment, we compare the barley heights with the model at the ash we really added: 0.17, 0.46 and 0.99 g per cell, which equal 1.5, 4.0 and 8.5 Mg/ha. Effective ash EC values that disagree with the heights are ruled out, and the model is run again.</p>
       </div>
-      <div class="pinchbar">
-        <div class="ctl"><label for="pinch"><span data-i18n="cPinch">Mass of one pinch of ash</span> <output id="pinchOut"></output> <span class="unit">g</span></label><input type="range" id="pinch" min="0.02" max="1.5" step="0.01"></div>
-        <div class="ctl small"><label for="pinchSd" data-i18n="cPinchSd">Spread between pinches, SD (g)</label><input type="number" id="pinchSd" min="0" max="1" step="0.01" placeholder="—"></div>
-        <div class="status" id="pinchStatus" role="status"></div>
+      <table class="data wide" id="tTray"><caption data-i18n="tTray">The ash we added: prediction before the experiment and measurement</caption></table>
+      <div class="afterpick"><span data-i18n="afterData">Data used for the after prediction</span>
+        <div class="seg" role="group" aria-label="Data used for the after prediction"><button type="button" data-after="tray" class="on" data-i18n="optTray">Trays only</button><button type="button" data-after="pot" data-i18n="optPot">Trays + pots</button></div>
       </div>
-      <p class="convert" id="convert"></p>
+      <p class="verdict" id="verdict"></p>
       <div class="c-grid">
         <figure class="plate"><figcaption><h3><span data-i18n="barley">Barley</span> <i class="latin">Hordeum vulgare</i></h3></figcaption><div class="chart" id="chBA_barley"></div></figure>
         <figure class="plate"><figcaption><h3><span data-i18n="bean">Bean</span> <i class="latin">Phaseolus vulgaris</i></h3></figcaption><div class="chart" id="chBA_bean"></div></figure>
@@ -123,13 +141,6 @@
       <ul class="legend" id="baLegend"></ul>
       <p class="keyline" id="keyline"></p>
       <table class="data wide" id="tBA"><caption data-i18n="tBA">Predicted growth at field ash loads, % of control</caption></table>
-      <h3 class="sub" data-i18n="tSweep">How the answer depends on the pinch mass</h3>
-      <p class="fine" id="sweepNote"></p>
-      <div class="s-grid">
-        <figure class="plate"><figcaption><h4 data-i18n="sw1">Effective ash EC, dS/m</h4></figcaption><div class="chart" id="chSw0"></div></figure>
-        <figure class="plate"><figcaption><h4 data-i18n="sw2">Barley at Extreme (34.2 Mg/ha), %</h4></figcaption><div class="chart" id="chSw1"></div></figure>
-        <figure class="plate"><figcaption><h4 data-i18n="sw3">Bean at Low (6.0 Mg/ha), %</h4></figcaption><div class="chart" id="chSw2"></div></figure>
-      </div>
       <p class="fine" data-i18n="calibNote">This section always uses the published values in the source table, not the sliders in the model section.</p>
     </div>
   </section>
@@ -150,7 +161,7 @@
   <div class="wrap">
     <p data-i18n="foot1">Made by Group 27 for the USS Capstone, Hanyang University YK Intercollege, 2026.</p>
     <p class="team">안상현, 오정효, 이준우, 윤상철, 이현진, 박지훈, 서한슬</p>
-    <p class="fine" data-i18n="foot2">The equations and numbers match the team's Colab notebook (G27_Ash_Growth_Simulator_v2.ipynb).</p>
+    <p class="fine" data-i18n="foot2">The equations and numbers match the team's Colab notebook (G27_Ash_Growth_Simulator_v3.ipynb).</p>
   </div>
 </footer>
 <div class="tip" id="tip" role="tooltip" hidden></div>

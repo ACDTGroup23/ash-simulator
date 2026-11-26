@@ -61,22 +61,29 @@
     return clamp(100 - b * (ecv - s.a), 0, 100);
   }
   const slopeB = sp => 100 / (D.SPECIES[sp].ec0 - D.SPECIES[sp].a);
+  // ash load (Mg/ha) at which a species starts to lose growth, for a given model (EC reaches threshold a)
+  function thresholdLoad(M, sp) {
+    const a = D.SPECIES[sp].a, k = M.P.ashEC * M.P.f;
+    if (a <= M.P.soilEC || k <= 0) return a <= M.P.soilEC ? 0 : Infinity;
+    const m = (a - M.P.soilEC) * M.water / (M.P.ratio * k); return m * 100 / M.area;
+  }
 
   // ---------- measured: barley on 6 Nov, log(height) = level + set ----------
-  const PINCHES = [1, 3, 6];
+  const DOSE_KEYS = [1, 3, 6];
+  const doseG = k => D.ASH_LEVELS.find(l => l.key === k).g;
   function finalRows(exclude168 = false) {
     const rows = [];
     D.BARLEY.filter(r => r.date === '11/6').forEach(r => {
       for (const k of [0, 1, 3, 6]) r.h[k].forEach(v => {
         if (exclude168 && r.set === 1 && k === 6 && v === 16.8) return;
-        rows.push({ set: r.set, pinch: k, h: v });
+        rows.push({ set: r.set, level: k, h: v });
       });
     });
     return rows;
   }
   function observedRatios(exclude168 = false) {
     const rows = finalRows(exclude168);
-    const X = rows.map(r => [1, +(r.pinch === 1), +(r.pinch === 3), +(r.pinch === 6), +(r.set === 2)]);
+    const X = rows.map(r => [1, +(r.level === 1), +(r.level === 3), +(r.level === 6), +(r.set === 2)]);
     const y = rows.map(r => Math.log(r.h));
     const p = 5, n = rows.length;
     const XtX = Array.from({ length: p }, (_, i) => Array.from({ length: p }, (_, j) => X.reduce((s, x) => s + x[i] * x[j], 0)));
@@ -91,12 +98,21 @@
     const se = [0, 1, 2].map(i => Math.sqrt(cov[i][i]));
     return {
       n, dof, L, cov, covInv: invert(cov), setDiff: beta[4],
-      nByLevel: [0, 1, 3, 6].map(k => rows.filter(r => r.pinch === k).length),
+      nByLevel: [0, 1, 3, 6].map(k => rows.filter(r => r.level === k).length),
       pct: L.map(v => 100 * Math.exp(v)),
       lo: L.map((v, i) => 100 * Math.exp(v - t * se[i])),
       hi: L.map((v, i) => 100 * Math.exp(v + t * se[i])),
     };
   }
+
+  // ---------- pots (barley second trial): soil water from the pot area and soil depth ----------
+  function potModel(M, depth = D.POT.soilDepthMin) {
+    const vol = D.POT.area * depth, water = vol * M.P.porosity;  // soil depth is at least 2 cm (seeds sown 2 cm deep)
+    return { vol, depth, water,
+      ec: (g, k = M.P.ashEC * M.P.f) => M.P.soilEC + k * (M.P.ratio * g / water) };
+  }
+  // pots where seedlings grew (ash > 0): used only when the pot constraint is switched on
+  const grownPots = () => D.POT.pots.filter(p => p.g > 0 && D.POT.records.some(r => r.h[p.id].length));
 
   // ---------- before -> after (Bayes on a grid of f x ash EC) ----------
   // ash EC and f only appear as their product k (effective ash EC), so k carries everything.
@@ -111,26 +127,28 @@
 
   function createCalibrator(M, obs, grid) {
     const N = grid.k.length;
-    function logLik(pinchG) {
-      const loads = PINCHES.map(p => p * pinchG * 100 / M.area);
+    const loads = DOSE_KEYS.map(k => doseG(k) * 100 / M.area);     // measured grams -> Mg/ha
+    function logLik(scale = 1) {
       const ll = new Float64Array(N);
       for (let i = 0; i < N; i++) {
-        const d = loads.map((L, j) => Math.log(Math.max(growth(M.ec(L, grid.k[i]), 'barley'), 0.5) / 100) - obs.L[j]);
+        const d = loads.map((L, j) => Math.log(Math.max(growth(M.ec(L * scale, grid.k[i]), 'barley'), 0.5) / 100) - obs.L[j]);
         let q = 0; for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) q += d[a] * obs.covInv[a][b] * d[b];
         ll[i] = -0.5 * q;
       }
       return ll;
     }
-    function posterior(pinchG, pinchSd) {
-      let ll;
-      if (pinchSd) {
-        const qs = linspace(0.05, 0.95, 11).map(p => pinchG + pinchSd * normInv(p)).filter(v => v > 0);
-        const lls = qs.map(logLik); ll = new Float64Array(N);
-        for (let i = 0; i < N; i++) { let m = -Infinity; for (const a of lls) m = Math.max(m, a[i]); let s = 0; for (const a of lls) s += Math.exp(a[i] - m); ll[i] = m + Math.log(s / lls.length); }
-      } else ll = logLik(pinchG);
+    // after = before x agreement with the measured barley heights at the doses we really used.
+    // usePot: also keep only values for which barley can grow (growth > 0) in the pots where seedlings grew.
+    const GP = grownPots();
+    function posterior(opts = {}) {
+      const PM = potModel(M, opts.potDepth);
+      const ll = logLik(opts.scale || 1);
       let mx = -Infinity; for (let i = 0; i < N; i++) mx = Math.max(mx, ll[i]);
       const w = new Float64Array(N); let s = 0;
-      for (let i = 0; i < N; i++) { w[i] = grid.prior[i] * Math.exp(ll[i] - mx); s += w[i]; }
+      for (let i = 0; i < N; i++) {
+        const ok = !opts.usePot || GP.every(p => growth(PM.ec(p.g, grid.k[i]), 'barley') > 0);
+        w[i] = ok ? grid.prior[i] * Math.exp(ll[i] - mx) : 0; s += w[i];
+      }
       for (let i = 0; i < N; i++) w[i] /= s;
       return w;
     }
@@ -162,9 +180,9 @@
         return vlo + fr * (vhi - vlo);
       }));
     }
-    return { posterior, kQuant, growthQuant, growthBand, prior: grid.prior };
+    return { posterior, kQuant, growthQuant, growthBand, prior: grid.prior, loads, grownPots: GP };
   }
 
-  const api = { clamp, linspace, mean, sd, normInv, tInv, invert, interp, makeModel, growth, slopeB, PINCHES, finalRows, observedRatios, makeGrid, createCalibrator };
+  const api = { clamp, linspace, mean, sd, normInv, tInv, invert, interp, makeModel, growth, slopeB, thresholdLoad, potModel, grownPots, DOSE_KEYS, doseG, finalRows, observedRatios, makeGrid, createCalibrator };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.G27_MODEL = api;
 })(typeof window !== 'undefined' ? window : globalThis);

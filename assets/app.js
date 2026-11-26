@@ -14,10 +14,9 @@
 
   // ---------- state ----------
   const P0 = D.PARAMS, SOILVOL0 = +(P0.cellSide ** 2 * (P0.cellDepth - P0.topGap)).toFixed(1);
-  const MP = D.MEASURED_PINCH;
   const state = {
     load: 6.0, ashEC: P0.ashEC, f: P0.f, soilEC: P0.soilEC, soilVol: SOILVOL0, porosity: P0.porosity,
-    heat: 'barley', pinch: MP ? MP.g : 0.5, pinchSd: MP && MP.sd ? MP.sd : null, ex168: false, lang: 'en',
+    heat: 'barley', ex168: false, usePot: false, potDepth: D.POT.soilDepthMin, lang: 'en',
   };
   try { const s = localStorage.getItem('g27-lang'); if (s === 'ko' || s === 'en') state.lang = s; else throw 0; }
   catch (e) { state.lang = (navigator.language || '').toLowerCase().startsWith('ko') ? 'ko' : 'en'; }
@@ -26,7 +25,10 @@
   const L = v => (v && typeof v === 'object') ? (v[state.lang] || v.en) : v;
   const fx = (v, d = 1) => (Math.round(v * 10 ** d) / 10 ** d).toFixed(d);
   const pct = v => Math.round(v).toString();
-  const lvName = k => k === 0 ? t('lvNone') : (k === 1 ? t('pinch1') : t('pinchN', { k }));
+  const gOf = k => D.ASH_LEVELS.find(l => l.key === k).g;
+  const gTxt = k => fx(gOf(k), 2);
+  const lvName = k => k === 0 ? t('lvNone') : `${gTxt(k)} g`;
+  const doseLoad = k => gOf(k) * 100 / (P0.cellSide ** 2);
   const model = () => Mo.makeModel({ ashEC: state.ashEC, f: state.f, soilEC: state.soilEC, soilVol: state.soilVol, porosity: state.porosity });
 
   // ---------- svg helpers ----------
@@ -217,6 +219,7 @@
     $('#heroNote').textContent = t('heroNote', { f: fx(state.f, 2) });
     $('#loadOut').textContent = fx(state.load, 1);
     $('#load').value = state.load;
+    $('#potDepth').value = state.potDepth;
     $$('.presets button').forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.load - state.load) < 0.05));
     renderArt(M);
     // chain
@@ -400,11 +403,11 @@
           const m = Mo.mean(used), se = used.length > 1 ? Mo.sd(used) / Math.sqrt(used.length) : 0, X = ch.x(cx + 0.42);
           S('path', { d: `M${X},${ch.y(m - se)}V${ch.y(m + se)}M${X - 4},${ch.y(m - se)}h8M${X - 4},${ch.y(m + se)}h8M${X - 9},${ch.y(m)}h18`, stroke: C.navy, 'stroke-width': 2.2, fill: 'none' }, ch.svg);
         }
-        txt(ch.svg, ch.x(cx + 0.1), ch.m.t + ch.ih + 17, String(k), { 'text-anchor': 'middle', class: 'lbl' });
+        txt(ch.svg, ch.x(cx + 0.1), ch.m.t + ch.ih + 17, k === 0 ? '0' : gTxt(k), { 'text-anchor': 'middle', class: 'lbl' });
         txt(ch.svg, ch.x(cx + 0.1), ch.m.t + ch.ih + 31, `n=${used.length}`, { 'text-anchor': 'middle', class: 'lbl', style: 'font-size:10.5px' });
       });
     });
-    txt(ch.svg, ch.m.l + ch.iw / 2, ch.H - 6, t('axPinch'), { 'text-anchor': 'middle', class: 'lbl', style: 'font-weight:600;fill:#20242a' });
+    txt(ch.svg, ch.m.l + ch.iw / 2, ch.H - 6, t('axAshG'), { 'text-anchor': 'middle', class: 'lbl', style: 'font-weight:600;fill:#20242a' });
     const lgd = S('g', {}, ch.svg);
     S('path', { d: `M${ch.m.l + ch.iw - 112},${ch.m.t + 8}h16`, stroke: C.navy, 'stroke-width': 2.2 }, lgd);
     txt(lgd, ch.m.l + ch.iw - 90, ch.m.t + 12, t('meanSE'), { class: 'lbl' });
@@ -414,51 +417,82 @@
     r.querySelectorAll('thead,tbody').forEach(n => n.remove());
     r.insertAdjacentHTML('beforeend', `<thead><tr><th>${t('colAsh')}</th><th class="num">${t('colPlants')}</th><th class="num">${t('colPct')}</th><th class="num">${t('colCI')}</th></tr></thead><tbody>` +
       `<tr><td>0</td><td class="num">${obs.nByLevel[0]}</td><td class="num">100</td><td class="num">—</td></tr>` +
-      Mo.PINCHES.map((k, i) => `<tr><td>${k}</td><td class="num">${obs.nByLevel[i + 1]}</td><td class="num">${pct(obs.pct[i])}</td><td class="num">${pct(obs.lo[i])}–${pct(obs.hi[i])}</td></tr>`).join('') + '</tbody>');
+      Mo.DOSE_KEYS.map((k, i) => `<tr><td>${gTxt(k)}</td><td class="num">${obs.nByLevel[i + 1]}</td><td class="num">${pct(obs.pct[i])}</td><td class="num">${pct(obs.lo[i])}–${pct(obs.hi[i])}</td></tr>`).join('') + '</tbody>');
     const e = $('#tEmerge');
     e.querySelectorAll('thead,tbody').forEach(n => n.remove());
     const mx = (s, k) => Math.max(...D.BARLEY.filter(r2 => r2.set === s).map(r2 => r2.h[k].length));
-    e.insertAdjacentHTML('beforeend', `<thead><tr><th>${t('colAsh')}</th>${LEVELS.map(k => `<th class="num">${k}</th>`).join('')}</tr></thead><tbody>` +
+    e.insertAdjacentHTML('beforeend', `<thead><tr><th>${t('colAsh')}</th>${LEVELS.map(k => `<th class="num">${k === 0 ? '0' : gTxt(k)}</th>`).join('')}</tr></thead><tbody>` +
       [1, 2].map(s => `<tr><td>${t(s === 1 ? 'set1' : 'set2')}</td>${LEVELS.map(k => `<td class="num">${mx(s, k)}/${D.SEEDS_PER_LEVEL}</td>`).join('')}</tr>`).join('') + '</tbody>');
+  }
+
+  function renderPot() {
+    const P2 = D.POT, el = $('#chPot');
+    const days = P2.records.map(r => r.day);
+    const ch = frame(el, { x: [4, 15], y: [0, 8], xTicks: days, yTicks: [0, 2, 4, 6, 8], xLabel: t('axDay'), yLabel: t('axHeight'), label: t('tPot'), margin: { r: 96 }, ratio: 0.62, minH: 240, maxH: 320 });
+    const col = { pM: ORD[3], pH: ORD[6] }, shp = { pM: 'triangle', pH: 'diamond' };
+    const ends = [];
+    P2.pots.filter(p => P2.records.some(r => r.h[p.id].length)).forEach(p => {
+      const n = Math.max(...P2.records.map(r => r.h[p.id].length));
+      for (let j = 0; j < n; j++) {
+        const pts = P2.records.filter(r => r.h[p.id].length > j).map(r => [r.day, r.h[p.id][j]]);
+        line(ch, pts.map(q => q[0]), pts.map(q => q[1]), { stroke: col[p.id], 'stroke-width': 2.2 });
+        pts.forEach(q => mark(ch.clip, shp[p.id], ch.x(q[0]), ch.y(q[1]), 4.4, { fill: col[p.id], stroke: '#fff', 'stroke-width': 1.2 }));
+        const last = pts[pts.length - 1];
+        ends.push({ y: last[1], s: `${fx(p.g, 2)} g` + (n > 1 ? ` (${t('plantN', { n: j + 1 })})` : ''), x: last[0], c: col[p.id] });
+      }
+    });
+    ends.sort((a, b) => a.y - b.y); let prev = Infinity;
+    ends.forEach(e => { let yy = ch.y(e.y) + 4; if (yy > prev - 13) yy = prev - 13; prev = yy; txt(ch.top, ch.x(e.x) + 9, yy, e.s, { class: 'lbl', style: 'font-size:11.5px' }); });
+    hover(ch, xv => {
+      const dd = nearest(days, xv), r = P2.records.find(q => q.day === dd);
+      return { x: dd, html: `<b>${r.date}, ${t('dayN', { d: dd })}</b>` + P2.pots.map(p => row(col[p.id] || null, `${fx(p.g, 2)} g`, r.h[p.id].length ? r.h[p.id].map(v => fx(v, 1)).join(', ') + ' cm' : '—')).join('') };
+    });
+    const tb = $('#tPot'); tb.querySelectorAll('thead,tbody').forEach(n => n.remove());
+    const lastR = P2.records[P2.records.length - 1];
+    const M0 = Mo.makeModel(), pm = Mo.potModel(M0, state.potDepth);
+    $('#potDepthOut').textContent = fx(state.potDepth, 1);
+    tb.insertAdjacentHTML('beforeend', `<thead><tr><th>${t('colPot')}</th><th class="num">${t('colAshPot')}</th><th class="num">Mg/ha</th><th class="num">${t('colEC1')}</th><th class="num">${t('colB1')}</th><th class="num">${t('colSeedl')}</th><th class="num">${t('colH25')}</th></tr></thead><tbody>` +
+      P2.pots.map(p => { const n = Math.max(...P2.records.map(r => r.h[p.id].length)), e = pm.ec(p.g); return `<tr><td>${L(p.label)}</td><td class="num">${fx(p.g, 2)}</td><td class="num">${fx(p.load, 1)}</td><td class="num">${fx(e, 1)}</td><td class="num">${pct(Mo.growth(e, 'barley'))}</td><td class="num">${n}/${P2.seeds}</td><td class="num">${lastR.h[p.id].length ? lastR.h[p.id].map(v => fx(v, 1)).join(', ') : '—'}</td></tr>`; }).join('') + '</tbody>');
+    const gp = Mo.grownPots(), kmax = Math.min(...gp.map(p => D.SPECIES.barley.ec0 * pm.water / (M0.P.ratio * p.g)));
+    const gmax = Math.max(...gp.map(p => p.g)), dcrit = M0.P.ashEC * M0.P.ratio * gmax / (D.SPECIES.barley.ec0 * D.POT.area * M0.P.porosity);
+    const ash = D.POT.pots.filter(p => p.g > 0), e = ash.map(p => pm.ec(p.g));
+    $('#potPred').textContent = t('potPred', { d: fx(state.potDepth, 1), y1: pct(Mo.growth(e[0], 'barley')), y2: pct(Mo.growth(e[1], 'barley')), y3: pct(Mo.growth(e[2], 'barley')),
+      e1: fx(e[0], 1), e2: fx(e[1], 1), e3: fx(e[2], 1), kmax: fx(kmax, 1), dcrit: fx(dcrit, 1) });
   }
 
   // ---------- calibration ----------
   let CAL = null;
   function buildCal() {
     const M0 = Mo.makeModel(), obs = Mo.observedRatios(state.ex168), grid = Mo.makeGrid(), Cb = Mo.createCalibrator(M0, obs, grid);
-    const prior = { barley: Cb.growthBand(LS, 'barley', grid.prior), bean: Cb.growthBand(LS, 'bean', grid.prior), k: Cb.kQuant(grid.prior) };
-    const f1 = { barley: LS.map(v => Mo.growth(M0.ec(v, P0.ashEC * 1), 'barley')), bean: LS.map(v => Mo.growth(M0.ec(v, P0.ashEC * 1), 'bean')) };
-    const PG = Mo.linspace(0.02, 1.5, 75);
-    const sw = PG.map(pg => { const w = Cb.posterior(pg); return { k: Cb.kQuant(w), b: Cb.growthQuant(P0.loads.Extreme, 'barley', w), n: Cb.growthQuant(P0.loads.Low, 'bean', w) }; });
-    const pb = Cb.growthQuant(P0.loads.Extreme, 'barley', grid.prior), pn = Cb.growthQuant(P0.loads.Low, 'bean', grid.prior);
-    let thr = null; for (let i = 0; i < PG.length; i++) if (sw[i].b[2] - sw[i].b[0] < 0.9 * (pb[2] - pb[0])) { thr = PG[i]; break; }
-    CAL = { M0, obs, grid, Cb, prior, f1, PG, sw, pb, pn, thr, post: null, postKey: '' };
+    const w = Cb.posterior();
+    CAL = { M0, obs, grid, Cb, w, potKey: null,
+      prior: { barley: Cb.growthBand(LS, 'barley', grid.prior), bean: Cb.growthBand(LS, 'bean', grid.prior), k: Cb.kQuant(grid.prior) },
+      post: { barley: Cb.growthBand(LS, 'barley', w), bean: Cb.growthBand(LS, 'bean', w), k: Cb.kQuant(w) },
+      f1: { barley: LS.map(v => Mo.growth(M0.ec(v), 'barley')), bean: LS.map(v => Mo.growth(M0.ec(v), 'bean')) },
+      maxDose: Math.max(...Cb.loads) };
   }
-  function posteriorNow() {
-    const key = state.pinch + '|' + state.pinchSd + '|' + state.ex168;
-    if (CAL.postKey !== key) {
-      const w = CAL.Cb.posterior(state.pinch, state.pinchSd);
-      CAL.post = { w, barley: CAL.Cb.growthBand(LS, 'barley', w), bean: CAL.Cb.growthBand(LS, 'bean', w), k: CAL.Cb.kQuant(w) };
-      CAL.postKey = key;
-    }
-    return CAL.post;
+  function ensurePot() {
+    if (CAL.potKey === state.potDepth) return;
+    const wPot = CAL.Cb.posterior({ usePot: true, potDepth: state.potDepth });
+    CAL.wPot = wPot; CAL.potKey = state.potDepth;
+    CAL.postPot = { barley: CAL.Cb.growthBand(LS, 'barley', wPot), bean: CAL.Cb.growthBand(LS, 'bean', wPot), k: CAL.Cb.kQuant(wPot) };
   }
-  function renderBA(sp, post) {
+  function renderBA(sp) {
     const el = $('#chBA_' + sp), ymax = sp === 'barley' ? 170 : 105;
     const ch = frame(el, { x: [0, 40], y: [0, ymax], yTicks: sp === 'barley' ? [0, 25, 50, 75, 100, 125, 150] : [0, 25, 50, 75, 100], xLabel: t('axLoad'), yLabel: t('axGrowth'), label: t('hCalib') + ': ' + t(sp), margin: { t: 22 } });
-    const pr = CAL.prior[sp], po = post[sp];
+    const pr = CAL.prior[sp], po = (state.usePot ? CAL.postPot : CAL.post)[sp];
+    S('rect', { x: ch.x(0), y: ch.m.t, width: ch.x(CAL.maxDose) - ch.x(0), height: ch.ih, fill: 'rgba(26,58,92,.07)' }, ch.clip);
     band(ch, LS, pr.map(q => q[0]), pr.map(q => q[2]), { fill: C.beforeBand });
     band(ch, LS, po.map(q => q[0]), po.map(q => q[2]), { fill: C.afterBand });
     line(ch, LS, pr.map(q => q[1]), { stroke: C.before, 'stroke-width': 1.6 });
     line(ch, LS, CAL.f1[sp], { stroke: C.before, 'stroke-width': 2, 'stroke-dasharray': '6 4' });
     line(ch, LS, po.map(q => q[1]), { stroke: C.after, 'stroke-width': 2.6 });
     FIELD.forEach(([k, v]) => vline(ch, v, t('p' + k)));
+    const tl = txt(ch.top, ch.x(CAL.maxDose / 2), ch.m.t + ch.ih - 8, t('tested'), { class: 'lbl', 'text-anchor': 'middle', style: 'font-size:11px;paint-order:stroke;stroke:#fff;stroke-width:3px' });
     if (sp === 'barley') {
       const o = CAL.obs;
-      Mo.PINCHES.forEach((k, i) => {
-        const xv = k * state.pinch * 100 / CAL.M0.area;
-        if (xv > 40) { txt(ch.top, ch.x(40) - 4, ch.y(ymax * 0.9) + (i - 1) * 14, `${lvName(k)} → ${fx(xv, 0)} Mg/ha ▸`, { 'text-anchor': 'end', class: 'lbl strong', style: 'font-size:11px' }); return; }
-        const X = ch.x(xv), hi = Math.min(o.hi[i], ymax);
+      Mo.DOSE_KEYS.forEach((k, i) => {
+        const xv = CAL.Cb.loads[i], X = ch.x(xv), hi = Math.min(o.hi[i], ymax);
         S('path', { d: `M${X},${ch.y(o.lo[i])}V${ch.y(hi)}M${X - 4},${ch.y(o.lo[i])}h8` + (o.hi[i] <= ymax ? `M${X - 4},${ch.y(hi)}h8` : ''), stroke: C.navy, 'stroke-width': 1.8, fill: 'none' }, ch.top);
         if (o.hi[i] > ymax) txt(ch.top, X + 5, ch.y(ymax) + 10, `↑${pct(o.hi[i])}`, { class: 'lbl', style: 'font-size:11px' });
         const c = S('circle', { cx: X, cy: ch.y(o.pct[i]), r: 5.5, fill: C.navy, stroke: '#fff', 'stroke-width': 1.5, class: 'pt' }, ch.top);
@@ -475,6 +509,7 @@
   }
   function legendItem(kind, label) {
     const svg = {
+      tested: `<rect x="1" y="2" width="24" height="12" fill="rgba(26,58,92,.07)" stroke="#c9d0d8"/>`,
       bandB: `<rect x="1" y="3" width="24" height="10" fill="${C.beforeBand}"/>`,
       medB: `<line x1="1" x2="25" y1="8" y2="8" stroke="${C.before}" stroke-width="1.6"/>`,
       f1: `<line x1="1" x2="25" y1="8" y2="8" stroke="${C.before}" stroke-width="2" stroke-dasharray="6 4"/>`,
@@ -484,55 +519,31 @@
     }[kind];
     return `<li><svg width="26" height="16" aria-hidden="true">${svg}</svg>${label}</li>`;
   }
-  function renderSweep() {
-    const panels = [['chSw0', 'k', [0, Math.ceil(CAL.prior.k[2] * 1.08)], CAL.prior.k, null],
-      ['chSw1', 'b', [0, 105], CAL.pb, CAL.f1.barley[LS.indexOf(LS.reduce((a, b) => Math.abs(b - P0.loads.Extreme) < Math.abs(a - P0.loads.Extreme) ? b : a))]],
-      ['chSw2', 'n', [0, 105], CAL.pn, null]];
-    // exact f = 1 values at the two field loads
-    panels[1][4] = Mo.growth(CAL.M0.ec(P0.loads.Extreme, P0.ashEC), 'barley');
-    panels[2][4] = Mo.growth(CAL.M0.ec(P0.loads.Low, P0.ashEC), 'bean');
-    panels.forEach(([id, key, yr, pr, f1v]) => {
-      const el = $('#' + id);
-      const ch = frame(el, { x: [0, 1.5], y: yr, xTicks: [0, 0.5, 1, 1.5], xLabel: t('axPinchG'), ratio: 0.7, minH: 220, maxH: 280, margin: { l: 42 } });
-      S('rect', { x: ch.m.l, width: ch.iw, y: ch.y(pr[2]), height: ch.y(pr[0]) - ch.y(pr[2]), fill: C.beforeBand }, ch.clip);
-      const lo = CAL.sw.map(s => s[key][0]), md = CAL.sw.map(s => s[key][1]), hi = CAL.sw.map(s => s[key][2]);
-      band(ch, CAL.PG, lo, hi, { fill: C.afterBand });
-      S('line', { x1: ch.m.l, x2: ch.m.l + ch.iw, y1: ch.y(pr[1]), y2: ch.y(pr[1]), stroke: C.before, 'stroke-width': 1.6 }, ch.clip);
-      if (f1v != null) S('line', { x1: ch.m.l, x2: ch.m.l + ch.iw, y1: ch.y(f1v), y2: ch.y(f1v), stroke: C.before, 'stroke-width': 2, 'stroke-dasharray': '6 4' }, ch.clip);
-      line(ch, CAL.PG, md, { stroke: C.after, 'stroke-width': 2.4 });
-      S('line', { x1: ch.x(state.pinch), x2: ch.x(state.pinch), y1: ch.m.t, y2: ch.m.t + ch.ih, stroke: C.char, 'stroke-width': 1.5 }, ch.top);
-      if (MP) S('line', { x1: ch.x(MP.g), x2: ch.x(MP.g), y1: ch.m.t, y2: ch.m.t + ch.ih, stroke: C.navy, 'stroke-width': 1.5, 'stroke-dasharray': '2 2' }, ch.top);
-      const unit = key === 'k' ? ' dS/m' : '%', f = v => key === 'k' ? fx(v, 1) : pct(v);
-      hover(ch, xv => {
-        const i = Math.round((xv - 0.02) / (1.5 - 0.02) * (CAL.PG.length - 1)), j = Math.max(0, Math.min(CAL.PG.length - 1, i)), s = CAL.sw[j][key];
-        return { x: CAL.PG[j], pts: [{ y: s[1], c: C.after }], html: `<b>${fx(CAL.PG[j], 2)} g</b>` + row(C.before, t('before'), `${f(pr[1])}${unit} (${f(pr[0])}–${f(pr[2])})`) + row(C.after, t('after'), `${f(s[1])}${unit} (${f(s[0])}–${f(s[2])})`) };
-      });
-    });
-    $('#sweepNote').textContent = CAL.thr ? t('sweepNote', { thr: fx(CAL.thr, 2) }) : '';
-  }
   function renderCalib() {
     if (!CAL) buildCal();
-    const post = posteriorNow();
-    $('#pinchOut').textContent = fx(state.pinch, 2);
-    $('#pinch').value = state.pinch;
-    const stEl = $('#pinchStatus');
-    if (!MP) { stEl.className = 'status'; stEl.textContent = t('stNone'); }
-    else if (Math.abs(state.pinch - MP.g) < 1e-9) { stEl.className = 'status ok'; stEl.textContent = t('stMeasured', { note: MP.note || `${MP.g} g` }); }
-    else {
-      stEl.className = 'status'; stEl.textContent = t('stExplore', { g: MP.g }) + ' ';
-      const b = document.createElement('button'); b.type = 'button'; b.textContent = t('useMeasured');
-      b.addEventListener('click', () => { state.pinch = MP.g; state.pinchSd = MP.sd || null; syncInputs(); schedule('calib', 'sweep'); });
-      stEl.appendChild(b);
-    }
-    $('#convert').textContent = t('convert', { p: fx(state.pinch, 2), g6: fx(6 * state.pinch, 2), L6: fx(6 * state.pinch * 100 / CAL.M0.area, 1) });
-    renderBA('barley', post); renderBA('bean', post);
-    $('#baLegend').innerHTML = legendItem('bandB', t('lgB95')) + legendItem('medB', t('lgBmed')) + legendItem('f1', t('lgBf1')) + legendItem('bandA', t('lgA95')) + legendItem('medA', t('lgAmed')) + legendItem('obs', t('lgObs'));
-    const k0 = CAL.prior.k, k1 = post.k;
+    ensurePot();
+    const M0 = CAL.M0, o = CAL.obs;
+    // tray table: prediction before the experiment vs measurement, at the ash we added
+    const tt = $('#tTray'); tt.querySelectorAll('thead,tbody').forEach(n => n.remove());
+    const rowsT = LEVELS.map((k, i) => {
+      const L = k === 0 ? 0 : CAL.Cb.loads[i - 1], e = M0.ec(L);
+      const meas = k === 0 ? '100' : `${pct(o.pct[i - 1])} (${pct(o.lo[i - 1])}–${pct(o.hi[i - 1])})`;
+      return `<tr><td>${k === 0 ? '0' : gTxt(k)}</td><td class="num">${fx(L, 1)}</td><td class="num">${fx(e, 1)}</td><td class="num">${pct(Mo.growth(e, 'barley'))}</td><td class="num">${pct(Mo.growth(e, 'bean'))}</td><td class="num">${meas}</td></tr>`;
+    }).join('');
+    tt.insertAdjacentHTML('beforeend', `<thead><tr><th>${t('colAsh')}</th><th class="num">${t('colEq')}</th><th class="num">${t('colEC1')}</th><th class="num">${t('colB1')}</th><th class="num">${t('colN1')}</th><th class="num">${t('colMeas')}</th></tr></thead><tbody>${rowsT}</tbody>`);
+    const Lb = Mo.thresholdLoad(M0, 'barley'), Ln = Mo.thresholdLoad(M0, 'bean');
+    const POST = state.usePot ? CAL.postPot : CAL.post, W = state.usePot ? CAL.wPot : CAL.w;
+    $$('[data-after]').forEach(b => b.classList.toggle('on', (b.dataset.after === 'pot') === state.usePot));
+    if (state.usePot) $('#verdict').textContent = t('verdictPot', { a: fx(CAL.prior.k[0], 1), b: fx(CAL.prior.k[2], 1), c: fx(POST.k[0], 1), d: fx(POST.k[2], 1), dep: fx(state.potDepth, 1) });
+    else $('#verdict').textContent = t('verdict', { gmax: gTxt(6), Lmax: fx(CAL.maxDose, 1), Lb: fx(Lb, 0), gb: fx(Lb * M0.area / 100, 2), Ln: fx(Ln, 1), gn: fx(Ln * M0.area / 100, 2) });
+    renderBA('barley'); renderBA('bean');
+    $('#baLegend').innerHTML = legendItem('tested', t('tested')) + legendItem('bandB', t('lgB95')) + legendItem('medB', t('lgBmed')) + legendItem('f1', t('lgBf1')) + legendItem('bandA', t('lgA95')) + legendItem('medA', t('lgAmed')) + legendItem('obs', t('lgObs'));
+    const k0 = CAL.prior.k, k1 = POST.k;
     $('#keyline').textContent = t('keyline', { a: fx(k0[0], 1), b: fx(k0[2], 1), c: fx(k1[0], 1), d: fx(k1[2], 1) });
     const tb = $('#tBA'); tb.querySelectorAll('thead,tbody').forEach(n => n.remove());
     let rows = '';
     ['barley', 'bean'].forEach(sp => FIELD.forEach(([k, v]) => {
-      const f1 = Mo.growth(CAL.M0.ec(v, P0.ashEC), sp), b = CAL.Cb.growthQuant(v, sp, CAL.grid.prior), a = CAL.Cb.growthQuant(v, sp, post.w);
+      const f1 = Mo.growth(M0.ec(v), sp), b = CAL.Cb.growthQuant(v, sp, CAL.grid.prior), a = CAL.Cb.growthQuant(v, sp, W);
       rows += `<tr><td>${t(sp)}</td><td>${t('p' + k)} (${fx(v, 1)})</td><td class="num">${pct(f1)}</td><td class="num">${pct(b[1])} (${pct(b[0])}–${pct(b[2])})</td><td class="num">${pct(a[1])} (${pct(a[0])}–${pct(a[2])})</td></tr>`;
     }));
     tb.insertAdjacentHTML('beforeend', `<thead><tr><th>${t('colSp')}</th><th>${t('colLoad')} (Mg/ha)</th><th class="num">${t('colBf1')}</th><th class="num">${t('colBmed')}</th><th class="num">${t('colAmed')}</th></tr></thead><tbody>${rows}</tbody>`);
@@ -543,11 +554,10 @@
     const tb = $('#tSources');
     tb.innerHTML = `<thead><tr><th>${t('colItem')}</th><th>${t('colVal')}</th><th>${t('colUnit')}</th><th>${t('colSrc')}</th></tr></thead><tbody>` +
       D.SOURCES.map(s => {
-        let val = L(s.value);
-        if (MP && /pinch/i.test(s.item.en)) val = `${MP.g}${MP.sd ? ' (SD ' + MP.sd + ')' : ''}`;
+        const val = L(s.value);
         return `<tr><td>${L(s.item)}</td><td>${val}</td><td>${s.unit}</td><td>${L(s.src)}</td></tr>`;
       }).join('') + '</tbody>';
-    $('#limits').innerHTML = ['lim1', 'lim2', 'lim3', 'lim4', 'lim5'].map(k => `<li>${t(k)}</li>`).join('');
+    $('#limits').innerHTML = ['lim1', 'lim2', 'lim3', 'lim4', 'lim5', 'lim6', 'lim7'].map(k => `<li>${t(k)}</li>`).join('');
     $('#refs').innerHTML = D.REFERENCES.map(r => `<li>${r}</li>`).join('');
   }
 
@@ -561,8 +571,7 @@
   const IN = [['ashEC', 'ashECOut', 0], ['f', 'fOut', 2], ['soilEC', 'soilECOut', 1], ['soilVol', 'soilVolOut', 1], ['porosity', 'porOut', 2]];
   function syncInputs() {
     IN.forEach(([k, o, d]) => { $('#' + k).value = state[k]; $('#' + o).textContent = fx(state[k], d); });
-    $('#load').value = state.load; $('#pinch').value = state.pinch;
-    $('#pinchSd').value = state.pinchSd != null ? state.pinchSd : '';
+    $('#load').value = state.load;
     $('#ex168').checked = state.ex168;
     $$('[data-heat]').forEach(b => b.classList.toggle('on', b.dataset.heat === state.heat));
   }
@@ -573,12 +582,11 @@
     const M = model();
     if (p.has('hero')) renderHero();
     if (p.has('model')) { renderGrowthChart(M); renderECChart(M); renderHeat(M); }
-    if (p.has('measured')) { renderTime(); renderDots(); renderTables(Mo.observedRatios(state.ex168)); }
+    if (p.has('measured')) { renderTime(); renderDots(); renderTables(Mo.observedRatios(state.ex168)); renderPot(); }
     if (p.has('calib')) renderCalib();
-    if (p.has('sweep')) renderSweep();
     if (p.has('sources')) renderSources();
   }
-  const ALL = ['hero', 'model', 'measured', 'calib', 'sweep', 'sources'];
+  const ALL = ['hero', 'model', 'measured', 'calib', 'sources'];
 
   function bind() {
     $('#load').addEventListener('input', e => { state.load = +e.target.value; schedule('hero', 'model'); });
@@ -586,9 +594,9 @@
     IN.forEach(([k, o, d]) => $('#' + k).addEventListener('input', e => { state[k] = +e.target.value; $('#' + o).textContent = fx(state[k], d); schedule('hero', 'model'); }));
     $('#reset').addEventListener('click', () => { Object.assign(state, { ashEC: P0.ashEC, f: P0.f, soilEC: P0.soilEC, soilVol: SOILVOL0, porosity: P0.porosity }); syncInputs(); schedule('hero', 'model'); });
     $$('[data-heat]').forEach(b => b.addEventListener('click', () => { state.heat = b.dataset.heat; syncInputs(); schedule('model'); }));
-    $('#ex168').addEventListener('change', e => { state.ex168 = e.target.checked; CAL = null; schedule('measured', 'calib', 'sweep'); });
-    $('#pinch').addEventListener('input', e => { state.pinch = +e.target.value; schedule('calib', 'sweep'); });
-    $('#pinchSd').addEventListener('input', e => { const v = parseFloat(e.target.value); state.pinchSd = isFinite(v) && v > 0 ? v : null; schedule('calib'); });
+    $('#potDepth').addEventListener('input', e => { state.potDepth = +e.target.value; schedule('measured', 'calib'); });
+    $$('[data-after]').forEach(b => b.addEventListener('click', () => { state.usePot = b.dataset.after === 'pot'; schedule('calib'); }));
+    $('#ex168').addEventListener('change', e => { state.ex168 = e.target.checked; CAL = null; schedule('measured', 'calib'); });
     $('#lang').addEventListener('click', () => {
       state.lang = state.lang === 'ko' ? 'en' : 'ko';
       try { localStorage.setItem('g27-lang', state.lang); } catch (e) { /* storage blocked: language resets on reload */ }
@@ -598,5 +606,6 @@
     addEventListener('resize', () => { if (Math.abs(innerWidth - lastW) < 8) return; lastW = innerWidth; clearTimeout(to); to = setTimeout(() => schedule(...ALL), 150); });
   }
 
+  $$('.presets button[data-key]').forEach(b => { b.dataset.load = doseLoad(+b.dataset.key); b.querySelector('.g').textContent = gTxt(+b.dataset.key) + ' g'; });
   syncInputs(); applyText(); bind(); schedule(...ALL);
 })();
